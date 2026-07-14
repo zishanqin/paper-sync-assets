@@ -1,0 +1,164 @@
+\documentclass[10pt,twocolumn,letterpaper]{article}
+
+\usepackage{dicta}
+\usepackage{times}
+\usepackage{epsfig}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{placeins}
+\usepackage{xfp}
+\usepackage[pagebackref=false,breaklinks=true,letterpaper=true,colorlinks,bookmarks=false]{hyperref}
+
+\def\dictaPaperID{****}
+\def\httilde{\mbox{\tt\raisebox{-.5ex}{\symbol{126}}}}
+\renewcommand{\thetable}{S\arabic{table}}
+\renewcommand{\thefigure}{S\arabic{figure}}
+\renewcommand{\thesection}{S\arabic{section}}
+\newcommand{\partialmetric}[1]{#1}
+\newcommand{\bestpartialmetric}[1]{\underline{#1}}
+\newcommand{\metricformat}[3]{%
+  \ifnum\fpeval{abs((#1)-(#3)) < 0.00005}=1
+    \ifnum\fpeval{#2}=1 \textbf{\underline{#1}}\else \underline{#1}\fi
+  \else
+    \ifnum\fpeval{#2}=1 \textbf{#1}\else #1\fi
+  \fi}
+\newcommand{\metriccd}[3]{\metricformat{#1}{(#1)<(#2)}{#3}}
+\newcommand{\metricf}[3]{\metricformat{#1}{(#1)>(#2)}{#3}}
+\newcommand{\metricbest}[2]{%
+  \ifnum\fpeval{abs((#1)-(#2)) < 0.00005}=1 \underline{#1}\else #1\fi}
+\newcommand{\resulttablesize}{\scriptsize}
+\newcommand{\resulttablespacing}[1]{\setlength{\tabcolsep}{#1}\renewcommand{\arraystretch}{0.92}}
+\makeatletter
+\setlength{\@fptop}{0pt}
+\setlength{\@dblfptop}{0pt}
+\makeatother
+\setlength{\textfloatsep}{5pt plus 1pt minus 1pt}
+\setlength{\dbltextfloatsep}{5pt plus 1pt minus 1pt}
+\setlength{\floatsep}{5pt plus 1pt minus 1pt}
+\setlength{\dblfloatsep}{5pt plus 1pt minus 1pt}
+\setlength{\intextsep}{5pt plus 1pt minus 1pt}
+\setlength{\abovecaptionskip}{2pt}
+\setlength{\belowcaptionskip}{0pt}
+
+\title{Supplementary Material: Curated Target-Part Preferences for Part-Aware Three-Dimensional (3D) Generation}
+\author{}
+
+\begin{document}
+\maketitle
+
+\section{Additional Related Work}
+\noindent\textbf{Image-to-3D and text-to-3D generation.}
+Recent 3D generation methods have made substantial progress in synthesizing object-level geometry from text, images, or sparse views. Score-distillation methods optimize 3D representations with guidance from pretrained two-dimensional (2D) diffusion models \cite{poole2022dreamfusion,lin2023magic3d}, while sparse-view, feed-forward reconstruction, and large-scale shape-generation pipelines improve single-image or few-view reconstruction efficiency \cite{liu2023zero1to3,hong2023lrm,li2025triposg}. These systems provide strong object-level generation baselines, but their objectives do not by themselves guarantee that local semantic components are separated, geometrically complete, or directly editable.
+
+\noindent\textbf{Part-aware 3D generation.}
+Part-aware generation methods can be organized into several broad families. Decompose-then-reconstruct pipelines recover or complete parts using segmentation, prompts, boxes, or multi-view cues \cite{chen2025partgen}. Native part-generation methods instead make parts first-class latent or token-level objects, using compositional part latents, contextual part latents, or autoregressive part discovery \cite{lin2025partcrafter,dong2025from,chen2025autopartgen}. Other work emphasizes structural layout, variable part count, or retrieval-augmented part editing \cite{yang2025omnipart,tang2025efficient,li2026partrag}. These works primarily improve the generator architecture, representation, or conditioning interface; in contrast, we keep the pretrained PartCrafter backbone fixed as the starting point and study whether curated same-input preferences can provide an additional part-level supervision signal.
+
+\noindent\textbf{Editable and articulated assets.}
+A related line studies whether generated parts are not only visible but also functional, editable, or usable in downstream asset pipelines. Articulated-generation methods infer part graphs, joints, axes, or motion ranges \cite{liu2024singapo,liu2026pact}. These directions motivate our focus on local part quality: if parts are missing, fused, or geometrically weak, later editing or articulation stages have little reliable structure to operate on.
+
+\noindent\textbf{Preference and reward alignment.}
+Preference learning has become a common way to improve generative models when direct likelihood supervision is insufficient. Direct Preference Optimization (DPO) optimizes a policy from pairwise preferences relative to a reference model \cite{rafailov2023direct}, and diffusion variants adapt this idea to denoising models \cite{wallace2024diffusiondpo}. This line is closely related to reinforcement learning from preferences, but our implementation is best described as a DPO-style pairwise objective with a frozen reference model: we do not run an online reward model or policy-gradient loop. Because preference labels can be incorrect or ambiguous, recent work also studies DPO under noisy feedback and random preference flips \cite{raychowdhury2024robustdpo}; this motivates our controlled pair-order perturbation study. In 3D generation, related work has explored preference feedback loops, human-preference alignment, and localized mesh refinement \cite{li2026circulardpo,zhou2025dreamdpoaligningtextto3dgeneration,liu2025meshrftenhancingmeshgeneration}. These methods mainly operate at whole-object, rendered-view, or generic mesh-quality levels. Our study narrows the preference signal to same-input, same-target-part comparisons so that the supervision describes local target-part quality rather than global asset quality alone.
+
+\section{Preference Construction Details}
+When reference geometry or reliable part-level metrics are available, an automatic target-part score ranks sampled outputs before curation. We write it as $S_{\mathrm{auto},\mathrm{part}}$ because it selects preferred target-part samples, not whole-object winners. Object-level terms act only as consistency checks against globally invalid outputs. The score combines object consistency, part geometry, and lightweight structural checks:
+{\small
+\begin{equation}
+\begin{aligned}
+S_{\mathrm{auto},\mathrm{part}}(y) =
+&w_{\mathrm{obj}}S_{\mathrm{obj}}(y)
++w_{\mathrm{part}}S_{\mathrm{part}}(y)\\
+&+w_{\mathrm{aux}}S_{\mathrm{aux}}(y).
+\end{aligned}
+\label{eq:supp_auto_score}
+\end{equation}
+}
+Here $S_{\mathrm{obj}}$ aggregates object-level FS and CD checks, $S_{\mathrm{part}}$ aggregates part-level FS and CD terms, and $S_{\mathrm{aux}}$ includes normal consistency and component quality. Normal consistency measures surface-orientation agreement with reference geometry; component quality penalizes fragmented predicted parts using connected-component statistics. When multiple valid predicted parts are scored, part-level terms are averaged before applying the part-level weight:
+{\small
+\begin{equation}
+\begin{aligned}
+S_{\mathrm{obj}}(y)&=
+\alpha_{\mathrm{obj}}^{\mathrm{FS}}\mathrm{FS}_{\mathrm{obj}}
++\alpha_{\mathrm{obj}}^{\mathrm{CD}}(1-\mathrm{CD}_{\mathrm{obj}}),\\
+S_{\mathrm{part}}(y)&=
+\frac{1}{|\mathcal{P}_{\mathrm{valid}}|}
+\sum_{q\in\mathcal{P}_{\mathrm{valid}}}
+\Bigl[
+\alpha_{\mathrm{part}}^{\mathrm{FS}}\mathrm{FS}_{q}\\
+&\quad+\alpha_{\mathrm{part}}^{\mathrm{CD}}
+(1-\min(\mathrm{CD}_{q},1))
+\Bigr],\\
+S_{\mathrm{aux}}(y)&=
+\alpha_{\mathrm{NC}}\mathrm{NC}
++\alpha_{\mathrm{CQ}}\mathrm{CQ}.
+\end{aligned}
+\end{equation}
+}
+Coefficients are fixed across metric-assisted ranking runs and used only for sample ordering, with object, part, and auxiliary terms normalized within groups before aggregation. Boundary-edge ratio and part intersection-over-union were retained only as calibration diagnostics and excluded from Eq.~\ref{eq:supp_auto_score} because their ranking power was unstable. Higher $S_{\mathrm{auto},\mathrm{part}}$ indicates a better target-part sample; $y_p^+$ is selected from high-scoring valid samples and $y_p^-$ from lower-scoring samples that pass non-empty and same-input checks. The training objective consumes only the resulting preferred--rejected ordering.
+
+\section{Full Pair-Source and Reliability Results}
+\begin{table*}[t]
+\centering
+\caption{Full comparison of pair sources and reliability controls. Metric-assisted settings use same-input target-part pairs selected by part-level scores and curation checks. \emph{+crop} removes part-surface regions, \emph{+flip} reverses labels, and \emph{+noise} injects uncurated seed-pair samples. The human-inspected settings are separate pilots, not a controlled pair-count ablation.}
+\label{tab:supp_main_results}
+\resulttablesize
+\resulttablespacing{0.5pt}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}llrrrrrrrrrrrr@{}}
+\toprule
+Method & Setting & \multicolumn{4}{c}{\textbf{Objaverse}} & \multicolumn{4}{c}{\textbf{ABO}} & \multicolumn{4}{c}{\textbf{ShapeNet}} \\
+\cmidrule(lr){3-6}\cmidrule(lr){7-10}\cmidrule(lr){11-14}
+ & & \multicolumn{2}{c}{Object} & \multicolumn{2}{c}{Part} & \multicolumn{2}{c}{Object} & \multicolumn{2}{c}{Part} & \multicolumn{2}{c}{Object} & \multicolumn{2}{c}{Part} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-10}\cmidrule(lr){11-12}\cmidrule(lr){13-14}
+ & & CD $\downarrow$ & FS $\uparrow$ & CD $\downarrow$ & FS $\uparrow$ & CD $\downarrow$ & FS $\uparrow$ & CD $\downarrow$ & FS $\uparrow$ & CD $\downarrow$ & FS $\uparrow$ & CD $\downarrow$ & FS $\uparrow$ \\
+\midrule
+Baseline & Pretrained & 0.2724 & 0.5680 & 0.2875 & 0.5453 & 0.1520 & 0.7806 & 0.3204 & 0.4888 & 0.1814 & 0.7130 & 0.3262 & 0.4457 \\
+\midrule
+\multirow{3}{*}{Metric-assisted} & 56 pairs & \metriccd{0.2626}{0.2724}{0.1986} & \metricf{0.5328}{0.5680}{0.6958} & \metriccd{0.3157}{0.2875}{0.2542} & \metricf{0.4545}{0.5453}{0.5725} & \metriccd{0.3000}{0.1520}{0.2233} & \metricf{0.4528}{0.7806}{0.6560} & \metriccd{0.3722}{0.3204}{0.3104} & \metricf{0.3437}{0.4888}{0.4707} & \metriccd{0.2843}{0.1814}{0.1833} & \metricf{0.4442}{0.7130}{0.7118} & \metriccd{0.3612}{0.3262}{0.2872} & \metricf{0.3500}{0.4457}{0.4688} \\
+ & 363 pairs & \metriccd{0.1986}{0.2724}{0.1986} & \metricf{0.6958}{0.5680}{0.6958} & \metriccd{0.2542}{0.2875}{0.2542} & \metricf{0.5725}{0.5453}{0.5725} & \metriccd{0.2233}{0.1520}{0.2233} & \metricf{0.6560}{0.7806}{0.6560} & \metriccd{0.3104}{0.3204}{0.3104} & \metricf{0.4707}{0.4888}{0.4707} & \metriccd{0.2099}{0.1814}{0.1833} & \metricf{0.6500}{0.7130}{0.7118} & \metriccd{0.2872}{0.3262}{0.2872} & \metricf{0.4688}{0.4457}{0.4688} \\
+ & \textbf{796 pairs} & \metriccd{0.2625}{0.2724}{0.1986} & \metricf{0.5881}{0.5680}{0.6958} & \metriccd{0.2716}{0.2875}{0.2542} & \metricf{0.5707}{0.5453}{0.5725} & \metriccd{0.1382}{0.1520}{0.1382} & \metricf{0.8072}{0.7806}{0.8072} & \metriccd{0.3215}{0.3204}{0.3104} & \metricf{0.4729}{0.4888}{0.4729} & \metriccd{0.1833}{0.1814}{0.1833} & \metricf{0.7118}{0.7130}{0.7118} & \metriccd{0.3344}{0.3262}{0.2872} & \metricf{0.4396}{0.4457}{0.4688} \\
+\midrule
+\multirow{2}{*}{Human-inspected} & 41 pairs & \metriccd{0.5127}{0.2724}{0.2603} & \metricf{0.1745}{0.5680}{0.5854} & \metriccd{0.5616}{0.2875}{0.2805} & \metricf{0.1285}{0.5453}{0.5573} & \metriccd{0.4440}{0.1520}{0.1400} & \metricf{0.2215}{0.7806}{0.8021} & \metriccd{0.5293}{0.3204}{0.3096} & \metricf{0.1531}{0.4888}{0.5006} & \metriccd{0.4942}{0.1814}{0.1725} & \metricf{0.1579}{0.7130}{0.7386} & \metriccd{0.5557}{0.3262}{0.3267} & \metricf{0.1284}{0.4457}{0.4493} \\
+ & 7 pairs & \metriccd{0.2603}{0.2724}{0.2603} & \metricf{0.5854}{0.5680}{0.5854} & \metriccd{0.2805}{0.2875}{0.2805} & \metricf{0.5573}{0.5453}{0.5573} & \metriccd{0.1400}{0.1520}{0.1400} & \metricf{0.8021}{0.7806}{0.8021} & \metriccd{0.3096}{0.3204}{0.3096} & \metricf{0.5006}{0.4888}{0.5006} & \metriccd{0.1725}{0.1814}{0.1725} & \metricf{0.7386}{0.7130}{0.7386} & \metriccd{0.3267}{0.3262}{0.3267} & \metricf{0.4493}{0.4457}{0.4493} \\
+\midrule
+\multirow{2}{*}{Synthetic neg.} & +crop 30\% & \metriccd{0.3529}{0.2724}{0.3529} & \metricf{0.4127}{0.5680}{0.4127} & \metriccd{0.3821}{0.2875}{0.3821} & \metricf{0.3398}{0.5453}{0.3398} & \metriccd{0.3319}{0.1520}{0.3319} & \metricf{0.4355}{0.7806}{0.4355} & \metriccd{0.4145}{0.3204}{0.4145} & \metricf{0.3072}{0.4888}{0.3072} & \metriccd{0.3681}{0.1814}{0.3514} & \metricf{0.3531}{0.7130}{0.3717} & \metriccd{0.4490}{0.3262}{0.4346} & \metricf{0.2541}{0.4457}{0.2631} \\
+ & +crop 50\% & \metriccd{0.3636}{0.2724}{0.3529} & \metricf{0.3721}{0.5680}{0.4127} & \metriccd{0.4222}{0.2875}{0.3821} & \metricf{0.2836}{0.5453}{0.3398} & \metriccd{0.3610}{0.1520}{0.3319} & \metricf{0.3950}{0.7806}{0.4355} & \metriccd{0.4280}{0.3204}{0.4145} & \metricf{0.2945}{0.4888}{0.3072} & \metriccd{0.3514}{0.1814}{0.3514} & \metricf{0.3717}{0.7130}{0.3717} & \metriccd{0.4346}{0.3262}{0.4346} & \metricf{0.2631}{0.4457}{0.2631} \\
+\midrule
+\multirow{3}{*}{Pair-order flip} & +flip 10\% & \metriccd{0.3848}{0.2724}{0.3628} & \metricf{0.3238}{0.5680}{0.3709} & \metriccd{0.4336}{0.2875}{0.4267} & \metricf{0.2690}{0.5453}{0.2858} & \metriccd{0.3678}{0.1520}{0.3678} & \metricf{0.3957}{0.7806}{0.3957} & \metriccd{0.4562}{0.3204}{0.4562} & \metricf{0.2672}{0.4888}{0.2672} & \metriccd{0.3722}{0.1814}{0.3722} & \metricf{0.3478}{0.7130}{0.3478} & \metriccd{0.4289}{0.3262}{0.4289} & \metricf{0.2645}{0.4457}{0.2645} \\
+ & +flip 30\% & \metriccd{0.3628}{0.2724}{0.3628} & \metricf{0.3709}{0.5680}{0.3709} & \metriccd{0.4267}{0.2875}{0.4267} & \metricf{0.2858}{0.5453}{0.2858} & \metriccd{0.4026}{0.1520}{0.3678} & \metricf{0.3161}{0.7806}{0.3957} & \metriccd{0.4783}{0.3204}{0.4562} & \metricf{0.2384}{0.4888}{0.2672} & \metriccd{0.3804}{0.1814}{0.3722} & \metricf{0.3102}{0.7130}{0.3478} & \metriccd{0.4560}{0.3262}{0.4289} & \metricf{0.2434}{0.4457}{0.2645} \\
+ & +flip 50\% & \metriccd{0.3738}{0.2724}{0.3628} & \metricf{0.3487}{0.5680}{0.3709} & \metriccd{0.4480}{0.2875}{0.4267} & \metricf{0.2579}{0.5453}{0.2858} & \metriccd{0.3996}{0.1520}{0.3678} & \metricf{0.3247}{0.7806}{0.3957} & \metriccd{0.4822}{0.3204}{0.4562} & \metricf{0.2192}{0.4888}{0.2672} & \metriccd{0.3833}{0.1814}{0.3722} & \metricf{0.3178}{0.7130}{0.3478} & \metriccd{0.4650}{0.3262}{0.4289} & \metricf{0.2194}{0.4457}{0.2645} \\
+\midrule
+\multirow{3}{*}{Noisy samples} & +noise 10\% & \metriccd{0.2461}{0.2724}{0.2461} & \metricf{0.5330}{0.5680}{0.5330} & \metriccd{0.3122}{0.2875}{0.3122} & \metricf{0.4319}{0.5453}{0.4319} & \metriccd{0.2267}{0.1520}{0.2267} & \metricf{0.6041}{0.7806}{0.6041} & \metriccd{0.3287}{0.3204}{0.3287} & \metricf{0.4440}{0.4888}{0.4440} & \metriccd{0.2432}{0.1814}{0.2432} & \metricf{0.5240}{0.7130}{0.5240} & \metriccd{0.3227}{0.3262}{0.3227} & \metricf{0.3975}{0.4457}{0.3975} \\
+ & +noise 30\% & \metriccd{0.3542}{0.2724}{0.2461} & \metricf{0.3554}{0.5680}{0.5330} & \metriccd{0.4398}{0.2875}{0.3122} & \metricf{0.2364}{0.5453}{0.4319} & \metriccd{0.3549}{0.1520}{0.2267} & \metricf{0.2719}{0.7806}{0.6041} & \metriccd{0.5075}{0.3204}{0.3287} & \metricf{0.1812}{0.4888}{0.4440} & \metriccd{0.3982}{0.1814}{0.2432} & \metricf{0.2512}{0.7130}{0.5240} & \metriccd{0.5219}{0.3262}{0.3227} & \metricf{0.1458}{0.4457}{0.3975} \\
+ & +noise 50\% & \metriccd{0.3635}{0.2724}{0.2461} & \metricf{0.3797}{0.5680}{0.5330} & \metriccd{0.4009}{0.2875}{0.3122} & \metricf{0.3043}{0.5453}{0.4319} & \metriccd{0.3147}{0.1520}{0.2267} & \metricf{0.3820}{0.7806}{0.6041} & \metriccd{0.4057}{0.3204}{0.3287} & \metricf{0.2755}{0.4888}{0.4440} & \metriccd{0.4225}{0.1814}{0.2432} & \metricf{0.2552}{0.7130}{0.5240} & \metriccd{0.4958}{0.3262}{0.3227} & \metricf{0.1892}{0.4457}{0.3975} \\
+\bottomrule
+\end{tabular*}
+\end{table*}
+
+The seven-pair pilot uses visually selected ShapeNet pairs from five source objects, retained after metric and multiview screening. Its exploratory checkpoint is trained for 200 steps with learning rate $3\times10^{-4}$, while evaluation follows the same fixed-list protocol as the other settings. It improves all four Objaverse and ABO metrics over the pretrained baseline and improves three of four ShapeNet metrics; ShapeNet Part CD is effectively unchanged (0.3267 versus 0.3262). The two human-inspected settings differ in source data, screening, and training settings, so their contrast should not be interpreted as a pair-count trend.
+
+\section{Additional Figures}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.82\textwidth,keepaspectratio]{figures/figure1_pair_selection_chair_20260707/dit_training_schematic/figure1_right_dit_training_schematic_vertical.png}
+\caption{Preference fine-tuning on the PartCrafter-style DiT backbone. The input image provides feature tokens, while the preferred and rejected samples provide noisy part-latent tokens. The trainable DiT and frozen reference evaluate the same pair; the pairwise loss and denoising regularizer update only the DiT denoiser.}
+\label{fig:supp_dit_preference_training}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.98\textwidth,keepaspectratio]{figures/figure4_relayout_assets_20260709/figure4_selected_M01_M05_X03_layout_two_row_zoom.png}
+\caption{Full qualitative multi-view comparisons. Each example uses the same input image and part count for the pretrained and preference-tuned models. Matched views show object consistency and part separation; zoom-in crops use the same highlighted local region for both methods.}
+\label{fig:supp_prediction_examples}
+\end{figure*}
+
+\FloatBarrier
+
+{\scriptsize
+\bibliographystyle{ieee}
+\bibliography{references}
+}
+
+\end{document}
